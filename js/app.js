@@ -182,6 +182,11 @@ function handleInput(event) {
     case INPUT_EVENT_TYPE.validateMoveInput: {
       // Apply the move to chess.js (free placement — no legality check)
       applyFreeMove(event.squareFrom, event.squareTo);
+      // Clear bars and tints immediately on drop — don't wait for moveInputFinished
+      isDragging    = false;
+      dragFromSq    = null;
+      dragPieceType = null;
+      heatmapOv?.clearAll();
       return true;   // always accept
     }
 
