@@ -165,20 +165,22 @@ export function boardToPosition(chess) {
   if (wKf === -1 || bKf === -1) return null;
   if (wPawns.length !== 2 || bPawns.length !== 1) return null;
 
-  // Identify the rook pawn among white's pawns (on a- or h-file)
-  const rookPawnIdx = wPawns.findIndex(p => p.file === 0 || p.file === 7);
+  // The black pawn determines the rook file (it must be on a- or h-file)
+  const bRookPawn = bPawns[0];
+  if (bRookPawn.file !== 0 && bRookPawn.file !== 7) return null;
+  const rookFile = bRookPawn.file;
+
+  // White rook pawn must be on the same file as the black pawn
+  const rookPawnIdx = wPawns.findIndex(p => p.file === rookFile);
   if (rookPawnIdx === -1) return null;
 
   const wRookPawn = wPawns[rookPawnIdx];
   const xPawn     = wPawns[1 - rookPawnIdx];
-  const bRookPawn = bPawns[0];
-  const rookFile  = wRookPawn.file;
 
   // Extra pawn must not be on the rook file
   if (xPawn.file === rookFile) return null;
 
-  // Black rook pawn must be on the same file and directly above white's
-  if (bRookPawn.file !== rookFile) return null;
+  // Black rook pawn must be directly above white's
   if (bRookPawn.rank !== wRookPawn.rank + 1) return null;
 
   // Rank range checks (0-indexed)
