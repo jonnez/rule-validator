@@ -57,7 +57,7 @@ let dragPieceType = null;   // 'extraPawn' | 'whiteKing' | ...
 // ── DOM references ────────────────────────────────────────────────────────────
 
 let elRuleSelect, elRuleDesc, elFenInput, elFenDisplay,
-    elValidityBadge, elMoveList, elSyzygyResult, elSyzygyBtn,
+    elValidityBadge, elMoveList,
     elStatusBar, elHeatmapToggle, elScoreDisplay;
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
@@ -85,6 +85,9 @@ async function init() {
     setStatus('Ready (Syzygy data unavailable).');
   }
 
+  // Refresh score display now that Syzygy data is available
+  updatePositionDisplay();
+
   // Legend
   const legendContainer = document.getElementById('legend-container');
   if (legendContainer) legendContainer.appendChild(buildLegend());
@@ -97,8 +100,6 @@ function grabDomRefs() {
   elFenDisplay    = document.getElementById('fen-display');
   elValidityBadge = document.getElementById('validity-badge');
   elMoveList      = document.getElementById('move-list');
-  elSyzygyResult  = document.getElementById('syzygy-result');
-  elSyzygyBtn     = document.getElementById('syzygy-btn');
   elStatusBar     = document.getElementById('status-bar');
   elHeatmapToggle = document.getElementById('heatmap-toggle');
   elScoreDisplay  = document.getElementById('score-display');
@@ -323,7 +324,6 @@ function updatePositionDisplay() {
 
   updateScoreDisplay(pos);
   updateMoveList();
-  clearSyzygyDisplay();
 }
 
 function updateScoreDisplay(pos) {
@@ -359,6 +359,21 @@ function updateScoreDisplay(pos) {
       const d2 = Math.max(Math.abs(pos.rookFile - inter.file), Math.abs(pos.bRR - inter.rank));
       html += ` — d1=${d1}, d2=${d2}, intersection=${coordToSquare(inter.file, inter.rank)}`;
       break;
+    }
+  }
+
+  // Syzygy ground truth
+  if (isSyzygyReady()) {
+    const syz = lookupPosition(pos);
+    if (syz !== 'unknown') {
+      const syzLabel = { win: 'White wins', draw: 'Draw', loss: 'Black wins' }[syz];
+      const syzClass = { win: 'win',        draw: 'draw', loss: 'loss'       }[syz];
+      html += `<br>Syzygy: <strong class="${syzClass}">${syzLabel}</strong>`;
+      if (pred !== syz) {
+        html += ` <span class="loss" style="font-size:0.8em">✗ rule disagrees</span>`;
+      } else {
+        html += ` <span class="win" style="font-size:0.8em">✓ rule agrees</span>`;
+      }
     }
   }
 
@@ -399,53 +414,6 @@ function playMove(mv) {
   }
 }
 
-function clearSyzygyDisplay() {
-  if (elSyzygyResult) {
-    elSyzygyResult.textContent = '';
-    elSyzygyResult.className   = 'syzygy-result';
-  }
-}
-
-// ── Syzygy query ──────────────────────────────────────────────────────────────
-
-function onQuerySyzygy() {
-  if (!elSyzygyResult || !elSyzygyBtn) return;
-
-  const pos = boardToPosition(chess);
-
-  if (!isSyzygyReady()) {
-    elSyzygyResult.textContent = '⚠ Syzygy tablebase not loaded.';
-    elSyzygyResult.className   = 'syzygy-result';
-    return;
-  }
-
-  if (!pos) {
-    elSyzygyResult.textContent = '⚠ Not a valid KPPvKP position.';
-    elSyzygyResult.className   = 'syzygy-result';
-    return;
-  }
-
-  const outcome = lookupPosition(pos);
-
-  let text;
-  if (outcome === 'unknown') {
-    text = '⚠ Result unknown (position marked invalid in tablebase)';
-  } else {
-    const outcomeStr = { win: '✓ White wins', draw: '½ Draw', loss: '✗ Black wins' }[outcome];
-    text = outcomeStr;
-
-    // Compare with current rule
-    const rulePred  = findRule(currentRuleId).predict(pos);
-    const ruleMatch = rulePred === outcome;
-    text += ruleMatch
-      ? '\n✓ Rule agrees with Syzygy'
-      : `\n✗ Rule says "${rulePred === 'win' ? 'White wins' : 'Draw'}" — disagrees!`;
-  }
-
-  elSyzygyResult.textContent = text;
-  elSyzygyResult.className   = `syzygy-result syzygy-${outcome}`;
-}
-
 // ── FEN load ──────────────────────────────────────────────────────────────────
 
 function loadFen(fenStr) {
@@ -477,8 +445,6 @@ function loadChessFen(fen) {
 
 function setupEventListeners() {
   elRuleSelect?.addEventListener('change', onRuleChanged);
-
-  elSyzygyBtn?.addEventListener('click', onQuerySyzygy);
 
   document.getElementById('fen-load-btn')?.addEventListener('click', () => {
     loadFen(elFenInput?.value ?? '');
