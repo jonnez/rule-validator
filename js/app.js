@@ -189,7 +189,7 @@ function handleInput(event) {
       isDragging    = false;
       dragFromSq    = null;
       dragPieceType = null;
-      heatmapOv?.clearTints();
+      heatmapOv?.clearAll();
       // Sync board display with chess.js state (handles captures cleanly)
       board.setPosition(chess.fen(), false);
       updatePositionDisplay();
@@ -201,7 +201,7 @@ function handleInput(event) {
       isDragging    = false;
       dragFromSq    = null;
       dragPieceType = null;
-      heatmapOv?.clearTints();
+      heatmapOv?.clearAll();
       break;
     }
   }
