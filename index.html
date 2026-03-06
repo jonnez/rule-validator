@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KPPvKP Endgame Rule Validator</title>
+
+  <!-- cm-chessboard CSS (v8) -->
+  <link rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/cm-chessboard@8/assets/chessboard.css">
+
+  <!-- Our styles -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app-wrapper">
+
+  <!-- ── Header ──────────────────────────────────────────────────────────── -->
+  <header>
+    <h1>KPPvKP Endgame Rule Validator</h1>
+    <span class="subtitle">White: King + rook pawn + extra pawn &nbsp;|&nbsp; Black: King + rook pawn</span>
+  </header>
+
+  <!-- ── Main content ────────────────────────────────────────────────────── -->
+  <div class="main-content">
+
+    <!-- ── Board panel ───────────────────────────────────────────────────── -->
+    <div class="board-panel">
+      <div id="board"></div>
+
+      <div class="board-controls">
+        <button class="btn-secondary btn-small" id="reset-btn" title="Reset to default position">↺ Reset</button>
+        <span id="validity-badge" class="badge badge-invalid">⚠ Not KPPvKP</span>
+      </div>
+    </div>
+
+    <!-- ── Controls panel ────────────────────────────────────────────────── -->
+    <div class="controls-panel">
+
+      <!-- Rule selector -->
+      <div class="card">
+        <h3>Rule</h3>
+        <select id="rule-select"></select>
+        <div id="rule-description"></div>
+      </div>
+
+      <!-- Current prediction -->
+      <div class="card">
+        <h3>Position Analysis</h3>
+        <div id="score-display">Load a KPPvKP position to analyse.</div>
+      </div>
+
+      <!-- Syzygy lookup -->
+      <div class="card">
+        <h3>Syzygy Tablebase</h3>
+        <button class="btn-primary btn-small" id="syzygy-btn">
+          Lookup Syzygy Result
+        </button>
+        <div id="syzygy-result" class="syzygy-result"></div>
+        <p style="font-size:0.72rem;color:var(--text-dim);margin-top:6px">
+          Instant WDL lookup from the bundled local tablebase
+          (<code>data/syzygy_kppvkp.bin</code>). No network requests.
+        </p>
+      </div>
+
+      <!-- FEN input -->
+      <div class="card">
+        <h3>Position (FEN)</h3>
+        <div class="fen-row">
+          <span id="fen-display"></span>
+          <button class="btn-secondary btn-small" id="fen-copy-btn" title="Copy FEN">⎘</button>
+        </div>
+        <input id="fen-input" type="text" placeholder="Paste FEN and press Enter or Load">
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="btn-primary btn-small" id="fen-load-btn">Load FEN</button>
+        </div>
+      </div>
+
+      <!-- Legal moves -->
+      <div class="card">
+        <h3>Legal Moves <span style="font-size:0.7rem;color:var(--text-dim)">(click to play)</span></h3>
+        <div id="move-list"></div>
+      </div>
+
+      <!-- Heatmap toggle + legend -->
+      <div class="card">
+        <h3>Heatmap</h3>
+        <div class="toggle-row">
+          <input type="checkbox" id="heatmap-toggle" checked>
+          <label for="heatmap-toggle">Show bars when dragging pieces</label>
+        </div>
+        <p style="font-size:0.72rem;color:var(--text-dim);margin:6px 0">
+          Drag any piece to see aggregate win/draw statistics per square.
+          <br>Top bar = selected rule &nbsp;|&nbsp; Bottom bar = Syzygy (loaded from local binary).
+        </p>
+        <div id="legend-container"></div>
+      </div>
+
+      <!-- Suggested positions -->
+      <div class="card">
+        <h3>Example Positions</h3>
+        <div id="example-positions" style="display:flex;flex-direction:column;gap:5px"></div>
+      </div>
+
+    </div><!-- end controls-panel -->
+  </div><!-- end main-content -->
+
+  <!-- ── Footer / status ─────────────────────────────────────────────────── -->
+  <footer>
+    <span id="status-bar">Initialising…</span>
+    <span>
+      <a href="README.md" target="_blank">README</a> &nbsp;|&nbsp;
+      <a href="https://github.com/" target="_blank">GitHub</a>
+    </span>
+  </footer>
+
+</div><!-- end app-wrapper -->
+
+<!-- ── Example position loader (inline, no module needed) ──────────────── -->
+<script>
+// Example positions loaded before app.js so the array is available globally
+window.EXAMPLES = [
+  {
+    label: "Bähr classic: a-pawn, extra on d4",
+    fen:   "8/8/4k3/8/3PK3/p7/P7/8 w - - 0 1",
+  },
+  {
+    label: "Bähr: extra pawn above the line (WIN)",
+    fen:   "8/8/2k5/8/2P1K3/p7/P7/8 w - - 0 1",
+  },
+  {
+    label: "Race Rule: black outside square (WIN)",
+    fen:   "8/6k1/8/8/3PK3/p7/P7/8 w - - 0 1",
+  },
+  {
+    label: "Race Rule: escort correction (WIN)",
+    fen:   "8/8/8/3k4/3PK3/p7/P7/8 w - - 0 1",
+  },
+  {
+    label: "Dvoretsky: white king bonus (WIN)",
+    fen:   "8/8/8/2k5/2P1K3/p7/P7/8 w - - 0 1",
+  },
+  {
+    label: "h-file rook pawn, extra on e4",
+    fen:   "8/8/3k4/8/4PK2/7p/7P/8 w - - 0 1",
+  },
+];
+</script>
+
+<!-- ── Main application (ES module) ────────────────────────────────────── -->
+<script type="module">
+// The app.js module drives everything. We also wire up the example positions
+// here because they reference the app's loadFen function indirectly through
+// the DOM (via the fen-input / fen-load-btn mechanism).
+
+// Populate example positions panel
+window.addEventListener('DOMContentLoaded', () => {
+  const container = document.getElementById('example-positions');
+  if (!container || !window.EXAMPLES) return;
+
+  for (const ex of window.EXAMPLES) {
+    const btn = document.createElement('button');
+    btn.className = 'btn-secondary btn-small';
+    btn.textContent = ex.label;
+    btn.style.textAlign = 'left';
+    btn.style.whiteSpace = 'nowrap';
+    btn.style.overflow = 'hidden';
+    btn.style.textOverflow = 'ellipsis';
+    btn.addEventListener('click', () => {
+      const fenInput  = document.getElementById('fen-input');
+      const loadBtn   = document.getElementById('fen-load-btn');
+      if (fenInput)  fenInput.value = ex.fen;
+      if (loadBtn)   loadBtn.click();
+    });
+    container.appendChild(btn);
+  }
+});
+</script>
+
+<!-- Load app.js after the inline script above -->
+<script type="module" src="js/app.js"></script>
+
+</body>
+</html>
