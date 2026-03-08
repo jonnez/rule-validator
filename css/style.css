@@ -227,31 +227,6 @@ button:disabled { opacity: 0.4; cursor: default; }
   font-size: 0.72rem;
 }
 
-/* ── Move list ───────────────────────────────────────────────────────────── */
-#move-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  max-height: 120px;
-  overflow-y: auto;
-}
-
-.move-btn {
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-  padding: 3px 7px;
-  font-size: 0.78rem;
-  font-family: var(--font-mono);
-  border-radius: 3px;
-}
-
-.move-btn:hover {
-  background: var(--accent);
-  color: #1a1c22;
-  border-color: var(--accent);
-}
-
 /* ── Syzygy result ───────────────────────────────────────────────────────── */
 .syzygy-result {
   font-size: 0.82rem;

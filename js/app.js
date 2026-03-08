@@ -60,7 +60,7 @@ let realPickupPending = false; // set by pointerdown; cleared when drag tracking
 // ── DOM references ────────────────────────────────────────────────────────────
 
 let elRuleSelect, elRuleDesc, elFenInput, elFenDisplay,
-    elValidityBadge, elMoveList,
+    elValidityBadge,
     elStatusBar, elHeatmapToggle, elScoreDisplay;
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
@@ -102,7 +102,6 @@ function grabDomRefs() {
   elFenInput      = document.getElementById('fen-input');
   elFenDisplay    = document.getElementById('fen-display');
   elValidityBadge = document.getElementById('validity-badge');
-  elMoveList      = document.getElementById('move-list');
   elStatusBar     = document.getElementById('status-bar');
   elHeatmapToggle = document.getElementById('heatmap-toggle');
   elScoreDisplay  = document.getElementById('score-display');
@@ -390,7 +389,6 @@ function updatePositionDisplay() {
   }
 
   updateScoreDisplay(pos);
-  updateMoveList();
 }
 
 function updateScoreDisplay(pos) {
@@ -445,40 +443,6 @@ function updateScoreDisplay(pos) {
   }
 
   elScoreDisplay.innerHTML = html;
-}
-
-function updateMoveList() {
-  if (!elMoveList) return;
-
-  let moves = [];
-  try { moves = chess.moves({ verbose: true }); } catch { /* position may be illegal */ }
-
-  elMoveList.innerHTML = '';
-  if (!moves.length) {
-    elMoveList.innerHTML = '<em style="color:var(--text-dim)">No legal moves</em>';
-    return;
-  }
-
-  for (const mv of moves) {
-    const btn = document.createElement('button');
-    btn.className   = 'move-btn';
-    btn.textContent = mv.san;
-    btn.title       = `${mv.from} → ${mv.to}`;
-    btn.addEventListener('click', () => playMove(mv));
-    elMoveList.appendChild(btn);
-  }
-}
-
-function playMove(mv) {
-  try {
-    chess.move(mv);
-    board.setPosition(chess.fen(), true);
-    updatePositionDisplay();
-    renderRuleOverlay();
-    heatmapOv?.clearAll();
-  } catch (e) {
-    console.warn('playMove error:', e);
-  }
 }
 
 // ── FEN load ──────────────────────────────────────────────────────────────────
