@@ -60,7 +60,7 @@ let realPickupPending = false; // set by pointerdown; cleared when drag tracking
 // ── DOM references ────────────────────────────────────────────────────────────
 
 let elRuleSelect, elRuleDesc, elFenInput, elFenDisplay,
-    elValidityBadge,
+    elValidityBadge, elLichessLink,
     elStatusBar, elHeatmapToggle, elScoreDisplay;
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
@@ -102,6 +102,7 @@ function grabDomRefs() {
   elFenInput      = document.getElementById('fen-input');
   elFenDisplay    = document.getElementById('fen-display');
   elValidityBadge = document.getElementById('validity-badge');
+  elLichessLink   = document.getElementById('lichess-link');
   elStatusBar     = document.getElementById('status-bar');
   elHeatmapToggle = document.getElementById('heatmap-toggle');
   elScoreDisplay  = document.getElementById('score-display');
@@ -373,8 +374,9 @@ function renderRuleOverlay() {
 function updatePositionDisplay() {
   const fen = chess.fen();
 
-  if (elFenDisplay) elFenDisplay.textContent = fen;
-  if (elFenInput)   elFenInput.value = fen;
+  if (elFenDisplay)  elFenDisplay.textContent = fen;
+  if (elFenInput)    elFenInput.value = fen;
+  if (elLichessLink) elLichessLink.href = `https://lichess.org/analysis/${fen.replace(/ /g, '_')}`;
 
   const pos = boardToPosition(chess);
 
