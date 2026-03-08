@@ -58,19 +58,39 @@ export const BahrRule = {
   description: `
     <p><strong>Source:</strong> Walter Bähr (1936), as reformulated by njswift on
     <a href="https://lichess.org/@/njswift/blog/formulating-bahrs-rule/r6Y2X63g" target="_blank">Lichess</a>.</p>
+    <p><strong>Applies when all three conditions hold:</strong></p>
+    <ul>
+      <li>White's rook pawn has <em>not yet reached the 5th rank</em>.</li>
+      <li>White's king stands <em>directly beside</em> the extra pawn (one square away).</li>
+      <li>Black's king stands <em>directly in front of</em> the White king (in direct opposition) or the extra pawn (one square ahead).</li>
+    </ul>
     <p>Draw a V-shaped dividing line starting at Black's rook pawn, ascending diagonally
     toward the nearest bishop file (c-file for an a-side rook pawn, f-file for h-side),
     one rank per file step. If rank 8 is reached before the bishop file, the ascent ends
     there (the apex). From the apex the line descends diagonally toward the board edge.</p>
     <ul>
-      <li>Extra pawn <em>on or above</em> the line → <strong>White wins</strong></li>
-      <li>Extra pawn <em>strictly below</em> the line → <strong>Draw</strong></li>
+      <li>Extra pawn <em>on or below</em> the line → <strong>White wins</strong></li>
+      <li>Extra pawn <em>strictly above</em> the line → <strong>Draw</strong></li>
     </ul>
     <p>The line is drawn in gold on the board. The apex is shown as a circle.</p>`,
 
   predict(pos) {
-    return (pos.xRank >= bahrThreshold(pos.rookFile, pos.bRR, pos.xFile))
+    return (pos.xRank <= bahrThreshold(pos.rookFile, pos.bRR, pos.xFile))
       ? 'win' : 'draw';
+  },
+
+  /**
+   * Original Bähr preconditions (from the Lichess study):
+   * (1) White rook pawn has not yet reached the 5th rank.
+   * (2) White king is standing directly beside its passed pawn.
+   * (3) Black king is standing directly in front of the white king or the passed pawn.
+   */
+  isApplicable(pos) {
+    if (pos.wRR >= 4) return false;  // (1) rook pawn not on 5th rank (0-indexed)
+    if (chebyshev(pos.wKf, pos.wKr, pos.xFile, pos.xRank) !== 1) return false;  // (2)
+    const inFrontOfWK   = pos.bKf === pos.wKf   && pos.bKr === pos.wKr   + 2;  // (3) direct opposition
+    const inFrontOfPawn = pos.bKf === pos.xFile  && pos.bKr === pos.xRank + 1;
+    return inFrontOfWK || inFrontOfPawn;
   },
 
   /** Return the apex and V-arm endpoints for drawing on the SVG board. */
@@ -119,6 +139,8 @@ export const MullerRule = {
     <p>The intersection point is shown as a diamond on the board.
     Distance annotations appear beside the board.</p>`,
 
+  isApplicable(_pos) { return true; },
+
   predict(pos) {
     const bishopFile = (pos.rookFile === 0) ? 2 : 5;
     const fileDist   = Math.abs(pos.xFile - bishopFile);
@@ -155,6 +177,8 @@ export const DvoretskyRule = {
     </table>
     <p>White total &gt; Black total → <strong>White wins</strong>; otherwise → <strong>Draw</strong>.</p>
     <p>The model diagonal is drawn in blue on the board.</p>`,
+
+  isApplicable(_pos) { return true; },
 
   predict(pos) {
     const lineRank       = Math.min(7, 2 + Math.abs(pos.xFile - pos.rookFile));
@@ -210,6 +234,8 @@ export const RaceRule = {
     </ul>
     <p>The square of the pawn is drawn as a green diamond on the board.
     The escort distance comparison is shown numerically.</p>`,
+
+  isApplicable(_pos) { return true; },
 
   predict(pos) {
     const stq      = 7 - pos.xRank;

@@ -379,24 +379,31 @@ function updatePositionDisplay() {
   if (elLichessLink) elLichessLink.href = `https://lichess.org/analysis/${fen.replace(/ /g, '_')}`;
 
   const pos = boardToPosition(chess);
+  // Syzygy returns 'unknown' (value 255) for illegal positions (e.g. adjacent kings).
+  // Treat those the same as structurally invalid.
+  const syzygyInvalid = pos && isSyzygyReady() && lookupPosition(pos) === 'unknown';
+  const effectivePos  = syzygyInvalid ? null : pos;
 
   if (elValidityBadge) {
-    if (pos) {
-      elValidityBadge.textContent = '✓ Valid KPPvKP';
+    if (!effectivePos) {
+      elValidityBadge.textContent = '⚠ Not a KPPvkp position';
+      elValidityBadge.className   = 'badge badge-invalid';
+    } else if (findRule(currentRuleId).isApplicable(effectivePos)) {
+      elValidityBadge.textContent = '✓ Valid KPPvkp';
       elValidityBadge.className   = 'badge badge-valid';
     } else {
-      elValidityBadge.textContent = '⚠ Not a KPPvKP position';
+      elValidityBadge.textContent = '⚠ Invalid according to selected rule';
       elValidityBadge.className   = 'badge badge-invalid';
     }
   }
 
-  updateScoreDisplay(pos);
+  updateScoreDisplay(effectivePos);
 }
 
 function updateScoreDisplay(pos) {
   if (!elScoreDisplay) return;
   if (!pos) {
-    elScoreDisplay.innerHTML = '<em>Set up a valid KPPvKP position to analyse.</em>';
+    elScoreDisplay.innerHTML = '<em>Set up a valid KPPvkp position to analyse.</em>';
     return;
   }
 

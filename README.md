@@ -25,7 +25,7 @@ Hosted at: `https://<your-github-username>.github.io/RuleValidator/`
 
 ### 1. Bähr's Rule (1936)
 Draw a V-shaped dividing line from Black's rook pawn toward the nearest bishop
-file, then descending.  Extra pawn **on or above** → White wins; **below** → Draw.
+file, then descending.  Extra pawn **on or below** → White wins; **strictly above** → Draw.
 Gold line drawn on the board.
 
 ### 2. Müller & Lamprecht Rule (*Secrets of Pawn Endings*, 2000)
