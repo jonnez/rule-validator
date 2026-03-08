@@ -50,9 +50,12 @@ let ruleOv        = null;
 let currentRuleId = 'bahr';
 let aggregateData = null;   // { [ruleId]: { [pieceKey]: [{win,draw,total}×64] } }
 let syzygyAgg     = null;   // loaded from data/syzygy-aggregates.json, or null
-let isDragging    = false;
-let dragFromSq    = null;
-let dragPieceType = null;   // 'extraPawn' | 'whiteKing' | ...
+let isDragging       = false;
+let dragFromSq       = null;
+let dragPieceType    = null;   // 'extraPawn' | 'whiteKing' | ...
+let moveApplied      = false;  // true when applyFreeMove was called; false for same-square drops
+let dragGeneration   = 0;      // incremented each time a new drag starts; lets stale timeouts self-cancel
+let realPickupPending = false; // set by pointerdown; cleared when drag tracking begins
 
 // ── DOM references ────────────────────────────────────────────────────────────
 
@@ -130,6 +133,29 @@ function setupBoard() {
   // Enable drag for any piece (no color restriction)
   board.enableMoveInput(handleInput);
 
+  // Fallback: cm-chessboard fires no cleanup event when a piece is dropped
+  // on its own source square. Detect pointerup while still in drag state and
+  // defer one tick — if cm-chessboard hasn't fired a cleanup event by then,
+  // do it ourselves.
+  document.addEventListener('pointerup', () => {
+    if (!isDragging) return;
+    const capturedGen = dragGeneration;
+    setTimeout(() => {
+      if (isDragging && dragGeneration === capturedGen) {
+        // cm-chessboard silently swallowed the drop (same-square edge case).
+        // No new drag has started since our pointerup — safe to clear.
+        isDragging    = false;
+        dragFromSq    = null;
+        dragPieceType = null;
+        heatmapOv?.clearAll();
+      }
+    }, 0);
+  });
+
+  document.addEventListener('pointerdown', () => {
+    realPickupPending = true;
+  });
+
   // Attach SVG overlays once the board's SVG is ready
   requestAnimationFrame(() => {
     const svgEl = getSvgElement();
@@ -162,6 +188,8 @@ function handleInput(event) {
   switch (event.type) {
 
     case INPUT_EVENT_TYPE.moveInputStarted: {
+      realPickupPending = false;  // normal drag start — clear pending flag
+      dragGeneration++;
       isDragging    = true;
       dragFromSq    = event.squareFrom;
       dragPieceType = detectPieceType(event.squareFrom);
@@ -173,36 +201,70 @@ function handleInput(event) {
     }
 
     case INPUT_EVENT_TYPE.movingOverSquare: {
-      if (isDragging && dragPieceType && event.squareTo) {
-        highlightTargetSquare(event.squareTo);
+      if (!isDragging && realPickupPending && event.squareFrom) {
+        // cm-chessboard skipped moveInputStarted — fake-start on first move event
+        realPickupPending = false;
+        dragGeneration++;
+        isDragging    = true;
+        dragFromSq    = event.squareFrom;
+        dragPieceType = detectPieceType(event.squareFrom);
+        if (dragPieceType && elHeatmapToggle?.checked !== false) {
+          renderHeatmapForPiece(dragPieceType);
+        }
+      }
+      if (isDragging && dragPieceType) {
+        if (event.squareTo && event.squareTo !== dragFromSq) {
+          highlightTargetSquare(event.squareTo);
+        } else {
+          heatmapOv?.clearTints();
+        }
       }
       return;
     }
 
     case INPUT_EVENT_TYPE.validateMoveInput: {
+      // Drop on source square — treat as cancel so cm-chessboard doesn't
+      // call board.setPosition() (which can trigger a spurious moveInputStarted)
+      if (event.squareFrom === event.squareTo) {
+        moveApplied   = false;
+        isDragging    = false;
+        dragFromSq    = null;
+        dragPieceType = null;
+        heatmapOv?.clearAll();
+        return false;
+      }
       // Apply the move to chess.js (free placement — no legality check)
       applyFreeMove(event.squareFrom, event.squareTo);
+      moveApplied   = true;
       // Clear bars and tints immediately on drop — don't wait for moveInputFinished
       isDragging    = false;
       dragFromSq    = null;
       dragPieceType = null;
       heatmapOv?.clearAll();
-      return true;   // always accept
+      return true;
     }
 
     case INPUT_EVENT_TYPE.moveInputFinished: {
+      if (!event.squareFrom && !event.squareTo) {
+        updatePositionDisplay();
+        renderRuleOverlay();
+        break;
+      }
       isDragging    = false;
       dragFromSq    = null;
       dragPieceType = null;
+      if (moveApplied) {
+        board.setPosition(chess.fen(), false);
+        moveApplied = false;
+      }
       heatmapOv?.clearAll();
-      // Sync board display with chess.js state (handles captures cleanly)
-      board.setPosition(chess.fen(), false);
       updatePositionDisplay();
       renderRuleOverlay();
       break;
     }
 
     case INPUT_EVENT_TYPE.moveInputCanceled: {
+      realPickupPending = false;
       isDragging    = false;
       dragFromSq    = null;
       dragPieceType = null;
