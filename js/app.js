@@ -298,7 +298,15 @@ function renderHeatmapForPiece(pieceKey) {
   if (!heatmapOv || !aggregateData) return;
   const ruleData = aggregateData[currentRuleId]?.[pieceKey];
   const syzData  = syzygyAgg?.[pieceKey] ?? null;
-  heatmapOv.renderBars(pieceKey, ruleData, syzData);
+
+  // The extra pawn cannot land on the rook file — suppress bars there
+  let skipFiles = null;
+  if (pieceKey === 'extraPawn') {
+    const pos = boardToPosition(chess);
+    if (pos) skipFiles = new Set([pos.rookFile]);
+  }
+
+  heatmapOv.renderBars(pieceKey, ruleData, syzData, skipFiles);
 }
 
 function highlightTargetSquare(algSq) {
@@ -306,10 +314,16 @@ function highlightTargetSquare(algSq) {
   const pos = boardToPosition(chess);
   if (!pos || !dragPieceType) return;
 
-  const rule = findRule(currentRuleId);
   const file = algSq.charCodeAt(0) - 97;
   const rank = parseInt(algSq[1]) - 1;
 
+  // Extra pawn cannot land on the rook file — invalid position
+  if (dragPieceType === 'extraPawn' && file === pos.rookFile) {
+    heatmapOv.clearTints();
+    return;
+  }
+
+  const rule = findRule(currentRuleId);
   const tempPos = buildTempPosition(pos, dragPieceType, file, rank);
   if (!tempPos) return;
 

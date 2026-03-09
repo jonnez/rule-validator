@@ -47,11 +47,12 @@ export class HeatmapOverlay {
   /**
    * Render the aggregate heatmap bars for a given piece type.
    *
-   * @param {string}  pieceKey    e.g. 'extraPawn', 'whiteKing', etc.
-   * @param {object}  ruleData    aggregateData[ruleId][pieceKey] — array of 64 {win,draw,total}
-   * @param {object}  syzygyData  syzygy[pieceKey] or null
+   * @param {string}      pieceKey    e.g. 'extraPawn', 'whiteKing', etc.
+   * @param {object}      ruleData    aggregateData[ruleId][pieceKey] — array of 64 {win,draw,total}
+   * @param {object}      syzygyData  syzygy[pieceKey] or null
+   * @param {Set<number>} skipFiles   file indices (0–7) to suppress entirely, or null
    */
-  renderBars(pieceKey, ruleData, syzygyData) {
+  renderBars(pieceKey, ruleData, syzygyData, skipFiles = null) {
     this._clear(this._heatmapGroup);
 
     const sq = this._sq;
@@ -62,6 +63,7 @@ export class HeatmapOverlay {
 
     for (let rank = 0; rank < 8; rank++) {
       for (let file = 0; file < 8; file++) {
+        if (skipFiles && skipFiles.has(file)) continue;
         const idx = rank * 8 + file;
         const { x, y } = this._squareOrigin(file, rank);
 
