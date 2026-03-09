@@ -26,6 +26,7 @@ import {
   boardToPosition, positionToFen,
   computeAggregates,
   coordToSquare,
+  hasMaterial,
 } from './position.js';
 import { HeatmapOverlay, buildLegend }     from './heatmap.js';
 import { RuleOverlay }                     from './overlay.js';
@@ -384,10 +385,18 @@ function updatePositionDisplay() {
   const syzygyInvalid = pos && isSyzygyReady() && lookupPosition(pos) === 'unknown';
   const effectivePos  = syzygyInvalid ? null : pos;
 
+  // Distinguish "wrong material" from "right material but outside rule structure"
+  const outsideScope  = !effectivePos && !pos && hasMaterial(chess);
+
   if (elValidityBadge) {
     if (!effectivePos) {
-      elValidityBadge.textContent = '⚠ Not a KPPvkp position';
-      elValidityBadge.className   = 'badge badge-invalid';
+      if (outsideScope) {
+        elValidityBadge.textContent = '⚠ Outside rule scope';
+        elValidityBadge.className   = 'badge badge-invalid';
+      } else {
+        elValidityBadge.textContent = '⚠ Not a KPPvkp position';
+        elValidityBadge.className   = 'badge badge-invalid';
+      }
     } else if (findRule(currentRuleId).isApplicable(effectivePos)) {
       elValidityBadge.textContent = '✓ Valid KPPvkp';
       elValidityBadge.className   = 'badge badge-valid';
@@ -397,13 +406,17 @@ function updatePositionDisplay() {
     }
   }
 
-  updateScoreDisplay(effectivePos);
+  updateScoreDisplay(effectivePos, outsideScope);
 }
 
-function updateScoreDisplay(pos) {
+function updateScoreDisplay(pos, outsideScope = false) {
   if (!elScoreDisplay) return;
   if (!pos) {
-    elScoreDisplay.innerHTML = '<em>Set up a valid KPPvkp position to analyse.</em>';
+    if (outsideScope) {
+      elScoreDisplay.innerHTML = '<em>Position has KPPvKP material but is outside the scope of these rules (e.g. both white pawns on the same file). The local Syzygy data does not cover this case — use the Lichess link to look it up.</em>';
+    } else {
+      elScoreDisplay.innerHTML = '<em>Set up a valid KPPvkp position to analyse.</em>';
+    }
     return;
   }
 

@@ -198,6 +198,24 @@ export function boardToPosition(chess) {
 }
 
 /**
+ * Return true if the chess position has exactly KPP vs KP material,
+ * regardless of structural validity for the rules.
+ */
+export function hasMaterial(chess) {
+  const boardArr = chess.board();
+  let wP = 0, bP = 0, wK = false, bK = false;
+  for (let row = 0; row < 8; row++) {
+    for (let f = 0; f < 8; f++) {
+      const sq = boardArr[row][f];
+      if (!sq) continue;
+      if (sq.type === 'k') { sq.color === 'w' ? (wK = true) : (bK = true); }
+      if (sq.type === 'p') { sq.color === 'w' ? wP++ : bP++; }
+    }
+  }
+  return wK && bK && wP === 2 && bP === 1;
+}
+
+/**
  * Build a FEN string from a KPPvKP position object (white to move, no castling/ep).
  */
 export function positionToFen(pos) {
