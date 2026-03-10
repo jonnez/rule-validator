@@ -28,6 +28,29 @@
     <div class="board-panel">
       <div id="board"></div>
 
+      <!-- ── Piece palette ─────────────────────────────────────────────────── -->
+      <div id="piece-palette">
+        <div class="palette-pieces">
+          <div class="palette-piece" data-color="w" data-type="k" title="White King">
+            <div class="palette-piece-bg"><svg viewBox="0 0 40 40"><use href="#wk"/></svg></div>
+            <span class="palette-count"></span>
+          </div>
+          <div class="palette-piece" data-color="w" data-type="p" title="White Pawn">
+            <div class="palette-piece-bg"><svg viewBox="0 0 40 40"><use href="#wp"/></svg></div>
+            <span class="palette-count"></span>
+          </div>
+          <div class="palette-piece" data-color="b" data-type="k" title="Black King">
+            <div class="palette-piece-bg"><svg viewBox="0 0 40 40"><use href="#bk"/></svg></div>
+            <span class="palette-count"></span>
+          </div>
+          <div class="palette-piece" data-color="b" data-type="p" title="Black Pawn">
+            <div class="palette-piece-bg"><svg viewBox="0 0 40 40"><use href="#bp"/></svg></div>
+            <span class="palette-count"></span>
+          </div>
+        </div>
+        <div class="palette-hint">Drag pieces to place &nbsp;·&nbsp; Drag off board to remove</div>
+      </div>
+
       <div class="board-controls">
         <button class="btn-secondary btn-small" id="reset-btn" title="Reset to default position">↺ Reset</button>
         <span id="validity-badge" class="badge badge-invalid">⚠ Not a KPPvkp position</span>

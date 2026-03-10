@@ -7,7 +7,7 @@ directly blocking White's rook pawn.
 
 ## Live demo
 
-Hosted at: `https://<your-github-username>.github.io/RuleValidator/`
+Hosted at: `https://jonnez.github.io/rule-validator/`
 
 ## Features
 
@@ -130,7 +130,7 @@ use a local server.
 
 1. Push this folder to a GitHub repository.
 2. Go to **Settings → Pages → Source**: select `main` branch, `/ (root)`.
-3. The site is live at `https://<user>.github.io/<repo>/`.
+3. The site is live at `https://jonnez.github.io/rule-validator/`.
 
 ## Related project
 
