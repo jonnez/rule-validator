@@ -455,7 +455,9 @@ function computeRuleStatsForPartialPos(tempPos, rule) {
           if (Math.abs(bKf - xFile)    === 1 && bKr === xRank + 1)   continue;
 
           try {
-            const outcome = rule.predict({ rookFile, wRR, bRR, xFile, xRank, wKf, wKr, bKf, bKr });
+            const p = { rookFile, wRR, bRR, xFile, xRank, wKf, wKr, bKf, bKr };
+            if (!rule.isApplicable(p)) continue;
+            const outcome = rule.predict(p);
             stats.total++;
             if      (outcome === 'win')  stats.win++;
             else if (outcome === 'draw') stats.draw++;
@@ -466,7 +468,10 @@ function computeRuleStatsForPartialPos(tempPos, rule) {
     }
   }
 
-  return stats.total > 0 ? stats : null;
+  // Return the stats even when total===0 (rule not applicable for any combination
+  // at this square).  Returning null here would wrongly trigger the aggregate
+  // fallback; returning {total:0} lets renderBars skip the bar silently.
+  return stats;
 }
 
 /**

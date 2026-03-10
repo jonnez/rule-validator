@@ -85,9 +85,9 @@ export function computeAggregates(rules = ALL_RULES) {
   }
 
   iteratePositions(pos => {
-    // Compute each rule prediction once
     for (const rule of rules) {
-      const prediction = rule.predict(pos); // 'win' or 'draw'
+      if (!rule.isApplicable(pos)) continue;
+      const prediction = rule.predict(pos);
       const d = result[rule.id];
 
       const update = (key, idx) => {

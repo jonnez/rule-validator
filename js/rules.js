@@ -61,7 +61,7 @@ export const BahrRule = {
     <p><strong>Applies when all three conditions hold:</strong></p>
     <ul>
       <li>White's rook pawn has <em>not yet reached the 5th rank</em>.</li>
-      <li>White's king stands <em>directly beside</em> the extra pawn (one square away).</li>
+      <li>White's king stands <em>directly beside</em> the extra pawn.</li>
       <li>Black's king stands <em>directly in front of</em> the White king (in direct opposition) or the extra pawn (one or two squares ahead — two squares is required when the White king is beside the pawn on the same rank, since one square would leave the kings diagonally adjacent).</li>
     </ul>
     <p>Draw a V-shaped dividing line starting at Black's rook pawn, ascending diagonally
@@ -87,7 +87,8 @@ export const BahrRule = {
    */
   isApplicable(pos) {
     if (pos.wRR >= 4) return false;  // (1) rook pawn not on 5th rank (0-indexed)
-    if (chebyshev(pos.wKf, pos.wKr, pos.xFile, pos.xRank) !== 1) return false;  // (2)
+    if (chebyshev(pos.wKf, pos.wKr, pos.xFile, pos.xRank) !== 1) return false;  // (2) adjacent
+    if (pos.wKr < pos.xRank) return false;  // (2) king must not be behind (below) the pawn
     const inFrontOfWK   = pos.bKf === pos.wKf  && pos.bKr === pos.wKr   + 2;  // (3a) direct opposition
     // (3b) in front of the extra pawn: 1 square ahead when the white king is behind
     // the pawn (so the kings stay ≥2 apart), or 2 squares ahead when the white king
