@@ -3,7 +3,7 @@
  *
  * Enumerates all 1,202 KPPvKP positions where Bähr's rule applies,
  * compares each against Syzygy and the other rules, and renders them
- * as mini canvas boards grouped by category.
+ * as a flat filterable grid of mini boards.
  */
 
 import { ALL_RULES, BahrRule } from './rules.js';
@@ -18,11 +18,6 @@ const DETAIL_SZ = 320;  // detail board canvas size (px)
 // Board square colors
 const LIGHT_SQ = '#f0d9b5';
 const DARK_SQ  = '#b58863';
-
-// Category border colors
-const COLOR_BAHR_WRONG  = '#e06060';  // Bähr incorrect vs Syzygy
-const COLOR_RULES_SPLIT = '#d4a030';  // Bähr correct but other rules diverge
-const COLOR_ALL_AGREE   = '#4caf50';  // everything agrees
 
 // Piece Unicode glyphs  (white = filled, black = outline)
 const PIECE_GLYPHS = {
@@ -39,10 +34,37 @@ const RULE_COLORS = {
 
 const SYZYGY_COLOR = '#40c0f0';
 
+// ── Filter configuration ───────────────────────────────────────────────────────
+
+const FILTER_ROWS = [
+  { key: 'bahr',      label: 'Bähr',      color: RULE_COLORS.bahr,      options: ['any','win','draw','loss','right','wrong'] },
+  { key: 'muller',    label: 'Müller',    color: RULE_COLORS.muller,    options: ['any','win','draw','loss','right','wrong'] },
+  { key: 'dvoretsky', label: 'Dvoretsky', color: RULE_COLORS.dvoretsky, options: ['any','win','draw','loss','right','wrong'] },
+  { key: 'race',      label: 'Race',      color: RULE_COLORS.race,      options: ['any','win','draw','loss','right','wrong'] },
+  { key: 'syzygy',    label: 'Syzygy',    color: SYZYGY_COLOR,          options: ['any','win','draw','loss'] },
+  { key: 'agreement', label: 'Rules',     color: null,                  options: ['any','agree','disagree'] },
+];
+
+const BUTTON_LABELS = {
+  any: 'Any', win: 'Win', draw: 'Draw', loss: 'Loss',
+  right: '✓ Right', wrong: '✗ Wrong',
+  agree: 'All agree', disagree: '≥2 disagree',
+};
+
 // ── State ──────────────────────────────────────────────────────────────────────
 
-let selectedPos   = null;   // currently clicked position object
-let selectedCanvas = null;  // the highlighted mini canvas
+let selectedPos    = null;
+let selectedCanvas = null;
+let allPositions   = [];
+
+const filterState = {
+  bahr:      'any',
+  muller:    'any',
+  dvoretsky: 'any',
+  race:      'any',
+  syzygy:    'any',
+  agreement: 'any',
+};
 
 // ── Entry point ────────────────────────────────────────────────────────────────
 
@@ -53,17 +75,19 @@ async function init() {
   await initSyzygy();
 
   setStatus('Collecting positions…');
-  const positions = collectPositions();
+  allPositions = collectPositions();
 
   setStatus('Rendering…');
   // yield to let status message paint
   await new Promise(r => setTimeout(r, 0));
 
-  renderAll(positions);
+  const area = document.getElementById('grid-area');
+  renderFilters(area, allPositions);
+  updateGrid(allPositions);
 
-  document.getElementById('loading-overlay').style.display  = 'none';
+  document.getElementById('loading-overlay').style.display = 'none';
   document.getElementById('pos-layout').style.display = '';
-  setStatus(`${positions.length} positions where Bähr applies.`);
+  setStatus(`${allPositions.length} positions where Bähr applies.`);
 }
 
 // ── Position collection ────────────────────────────────────────────────────────
@@ -77,146 +101,170 @@ function collectPositions() {
   iteratePositions(pos => {
     if (!BahrRule.isApplicable(pos)) return;
 
-    const bahrPred = BahrRule.predict(pos);
-    const syzPred  = isSyzygyReady() ? lookupPosition(pos) : null;
-
-    // Per-rule predictions for all four rules
     const preds = {};
     for (const rule of ALL_RULES) {
       preds[rule.id] = rule.isApplicable(pos) ? rule.predict(pos) : null;
     }
 
-    const fen = positionToFen(pos);
+    const fen     = positionToFen(pos);
+    const syzPred = isSyzygyReady() ? lookupPosition(pos) : null;
 
-    // Determine category
-    let category;
-    if (syzPred && syzPred !== 'unknown') {
-      if (bahrPred !== syzPred) {
-        category = bahrPred === 'win' ? 'bahr-false-win' : 'bahr-false-draw';
-      } else {
-        // Bähr correct — do other rules agree with Syzygy?
-        const anyDiverge = ALL_RULES.some(r => {
-          const p = preds[r.id];
-          return p !== null && p !== syzPred;
-        });
-        category = anyDiverge ? 'rules-split' : 'all-agree';
-      }
-    } else {
-      // No Syzygy — compare rules to Bähr
-      const anyDiverge = ALL_RULES.some(r => {
-        const p = preds[r.id];
-        return r.id !== 'bahr' && p !== null && p !== bahrPred;
-      });
-      category = anyDiverge ? 'rules-split' : 'all-agree';
-    }
-
-    result.push({ ...pos, fen, bahrPred, syzPred, preds, category });
+    result.push({ ...pos, fen, syzPred, preds });
   });
   return result;
 }
 
-// ── Rendering ──────────────────────────────────────────────────────────────────
+// ── Filter UI ──────────────────────────────────────────────────────────────────
 
-const SECTIONS = [
-  {
-    key:   'bahr-false-win',
-    title: 'Bähr says WIN — Syzygy says DRAW',
-    desc:  'Positions where Bähr\'s rule incorrectly predicts a White win.',
-    color: COLOR_BAHR_WRONG,
-    open:  true,
-  },
-  {
-    key:   'bahr-false-draw',
-    title: 'Bähr says DRAW — Syzygy says WIN',
-    desc:  'Positions where Bähr\'s rule incorrectly predicts a draw.',
-    color: COLOR_BAHR_WRONG,
-    open:  true,
-  },
-  {
-    key:   'rules-split',
-    title: 'Rules disagree',
-    desc:  'Bähr is correct, but at least one other rule gives a different verdict.',
-    color: COLOR_RULES_SPLIT,
-    open:  true,
-  },
-  {
-    key:   'all-agree',
-    title: 'All rules agree',
-    desc:  'All four rules and Syzygy give the same verdict.',
-    color: COLOR_ALL_AGREE,
-    open:  false,
-  },
-];
+function renderFilters(area, positions) {
+  const panel = document.createElement('div');
+  panel.className = 'pos-filters card';
+  panel.id = 'filter-panel';
 
-function renderAll(positions) {
-  const area = document.getElementById('grid-area');
-  area.innerHTML = '';
+  for (const row of FILTER_ROWS) {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'pos-filter-row';
 
-  const byCategory = {};
-  for (const s of SECTIONS) byCategory[s.key] = [];
-  for (const pos of positions) {
-    (byCategory[pos.category] ??= []).push(pos);
+    const label = document.createElement('span');
+    label.className = 'pos-filter-label';
+    if (row.color) {
+      const dot = document.createElement('span');
+      dot.className = 'pos-filter-dot';
+      dot.style.background = row.color;
+      label.appendChild(dot);
+    }
+    label.appendChild(document.createTextNode(row.label));
+    rowEl.appendChild(label);
+
+    const btnGroup = document.createElement('div');
+    btnGroup.className = 'pos-filter-btngroup';
+
+    for (const val of row.options) {
+      const btn = document.createElement('button');
+      btn.className = 'pos-filter-btn';
+      btn.dataset.key   = row.key;
+      btn.dataset.value = val;
+      btn.textContent   = BUTTON_LABELS[val];
+
+      if (filterState[row.key] === val) btn.classList.add('active');
+
+      // Disable syzygy-dependent buttons if tablebase not loaded
+      const syzygyDependent = (val === 'right' || val === 'wrong') ||
+                              (row.key === 'syzygy' && val !== 'any');
+      if (syzygyDependent && !isSyzygyReady()) {
+        btn.disabled = true;
+        btn.title = 'Syzygy tablebase not loaded';
+      }
+
+      btn.addEventListener('click', () => {
+        filterState[row.key] = val;
+        btnGroup.querySelectorAll('.pos-filter-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.value === val);
+        });
+        updateGrid(positions);
+      });
+
+      btnGroup.appendChild(btn);
+    }
+
+    rowEl.appendChild(btnGroup);
+    panel.appendChild(rowEl);
   }
 
-  for (const section of SECTIONS) {
-    const items = byCategory[section.key] ?? [];
-    if (items.length === 0) continue;
+  const countEl = document.createElement('div');
+  countEl.className = 'pos-filter-count';
+  countEl.id = 'filter-count';
+  panel.appendChild(countEl);
 
-    const details = document.createElement('details');
-    details.className = 'pos-section';
-    if (section.open) details.open = true;
-    details.style.setProperty('--section-color', section.color);
+  area.appendChild(panel);
 
-    const summary = document.createElement('summary');
-    summary.className = 'pos-section-summary';
-    summary.innerHTML = `
-      <span class="pos-section-dot" style="background:${section.color}"></span>
-      <span class="pos-section-title">${section.title}</span>
-      <span class="pos-section-count">${items.length}</span>
-    `;
-    details.appendChild(summary);
+  // Grid container (populated by updateGrid)
+  const grid = document.createElement('div');
+  grid.className = 'pos-mini-grid';
+  grid.id = 'mini-grid';
+  area.appendChild(grid);
+}
 
-    if (section.desc) {
-      const desc = document.createElement('p');
-      desc.className = 'pos-section-desc';
-      desc.textContent = section.desc;
-      details.appendChild(desc);
+function matchesFilter(pos) {
+  const syzKnown = pos.syzPred && pos.syzPred !== 'unknown';
+
+  // Per-rule filters
+  for (const ruleKey of ['bahr', 'muller', 'dvoretsky', 'race']) {
+    const f = filterState[ruleKey];
+    if (f === 'any') continue;
+
+    const pred = pos.preds[ruleKey];
+
+    if (f === 'win' || f === 'draw' || f === 'loss') {
+      if (pred !== f) return false;
+    } else if (f === 'right') {
+      if (!syzKnown || pred === null || pred !== pos.syzPred) return false;
+    } else if (f === 'wrong') {
+      if (!syzKnown || pred === null || pred === pos.syzPred) return false;
     }
+  }
 
-    const grid = document.createElement('div');
-    grid.className = 'pos-mini-grid';
-    details.appendChild(grid);
+  // Syzygy filter
+  if (filterState.syzygy !== 'any') {
+    if (pos.syzPred !== filterState.syzygy) return false;
+  }
 
-    for (const pos of items) {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'pos-mini-wrapper';
-      wrapper.style.setProperty('--border-color', section.color);
+  // Agreement filter
+  const af = filterState.agreement;
+  if (af !== 'any') {
+    const activePreds = ALL_RULES.map(r => pos.preds[r.id]).filter(p => p !== null);
+    const unique = new Set(activePreds);
+    if (af === 'agree'    && unique.size !== 1) return false;
+    if (af === 'disagree' && unique.size < 2)   return false;
+  }
 
-      const canvas = document.createElement('canvas');
-      canvas.width  = MINI_SZ;
-      canvas.height = MINI_SZ;
-      canvas.className = 'pos-mini-canvas';
-      drawBoard(canvas, pos, MINI_SZ);
-      wrapper.appendChild(canvas);
+  return true;
+}
 
-      // Verdict badge below
-      const badge = document.createElement('div');
-      badge.className = 'pos-mini-badge';
-      if (pos.syzPred && pos.syzPred !== 'unknown') {
-        const syzLabel = pos.syzPred === 'win' ? 'W wins' : pos.syzPred === 'draw' ? 'Draw' : 'B wins';
-        badge.textContent = syzLabel;
-        badge.classList.add(pos.syzPred === 'win' ? 'badge-win' : pos.syzPred === 'draw' ? 'badge-draw' : 'badge-loss');
-      } else {
-        badge.textContent = pos.bahrPred === 'win' ? 'W wins' : 'Draw';
-        badge.classList.add(pos.bahrPred === 'win' ? 'badge-win' : 'badge-draw');
-      }
-      wrapper.appendChild(badge);
+function updateGrid(positions) {
+  const grid    = document.getElementById('mini-grid');
+  const countEl = document.getElementById('filter-count');
+  if (!grid) return;
 
-      wrapper.addEventListener('click', () => selectPosition(pos, canvas, wrapper));
-      grid.appendChild(wrapper);
+  const filtered = positions.filter(matchesFilter);
+
+  if (countEl) {
+    countEl.textContent = `Showing ${filtered.length} / ${positions.length}`;
+  }
+
+  grid.innerHTML = '';
+
+  for (const pos of filtered) {
+    const syzKnown  = pos.syzPred && pos.syzPred !== 'unknown';
+    const bahrWrong = syzKnown && pos.preds.bahr !== pos.syzPred;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'pos-mini-wrapper';
+    if (bahrWrong) wrapper.classList.add('pos-mini-wrong');
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = MINI_SZ;
+    canvas.height = MINI_SZ;
+    canvas.className = 'pos-mini-canvas';
+    drawBoard(canvas, pos, MINI_SZ);
+    wrapper.appendChild(canvas);
+
+    // Verdict badge
+    const badge = document.createElement('div');
+    badge.className = 'pos-mini-badge';
+    if (syzKnown) {
+      const syzLabel = pos.syzPred === 'win' ? 'W wins' : pos.syzPred === 'draw' ? 'Draw' : 'B wins';
+      badge.textContent = syzLabel;
+      badge.classList.add(pos.syzPred === 'win' ? 'badge-win' : pos.syzPred === 'draw' ? 'badge-draw' : 'badge-loss');
+    } else {
+      const bahrPred = pos.preds.bahr;
+      badge.textContent = bahrPred === 'win' ? 'W wins' : 'Draw';
+      badge.classList.add(bahrPred === 'win' ? 'badge-win' : 'badge-draw');
     }
+    wrapper.appendChild(badge);
 
-    area.appendChild(details);
+    wrapper.addEventListener('click', () => selectPosition(pos, canvas, wrapper));
+    grid.appendChild(wrapper);
   }
 }
 
@@ -224,15 +272,11 @@ function renderAll(positions) {
 
 /**
  * Draw a KPPvKP position onto a canvas.
- * @param {HTMLCanvasElement} canvas
- * @param {object} pos  — full position object
- * @param {number} size — canvas size in px
  */
 function drawBoard(canvas, pos, size) {
   const sq  = size / 8;
   const ctx = canvas.getContext('2d');
 
-  // Squares
   for (let rank = 0; rank < 8; rank++) {
     for (let file = 0; file < 8; file++) {
       const x = file * sq;
@@ -242,10 +286,9 @@ function drawBoard(canvas, pos, size) {
     }
   }
 
-  // Pieces
-  const pieces = positionToPieces(pos);
+  const pieces   = positionToPieces(pos);
   const fontSize = Math.round(sq * 0.72);
-  ctx.font = `${fontSize}px serif`;
+  ctx.font         = `${fontSize}px serif`;
   ctx.textAlign    = 'center';
   ctx.textBaseline = 'middle';
 
@@ -253,7 +296,6 @@ function drawBoard(canvas, pos, size) {
     const cx = file * sq + sq / 2;
     const cy = (7 - rank) * sq + sq / 2;
 
-    // Shadow / outline for contrast
     ctx.fillStyle = isWhite ? '#000' : '#fff';
     ctx.fillText(glyph, cx + 1, cy + 1);
     ctx.fillStyle = isWhite ? '#fff' : '#1a1a1a';
@@ -261,9 +303,6 @@ function drawBoard(canvas, pos, size) {
   }
 }
 
-/**
- * Return an array of {file, rank, glyph, isWhite} for a position.
- */
 function positionToPieces(pos) {
   return [
     { file: pos.wKf,      rank: pos.wKr,   glyph: PIECE_GLYPHS.wk, isWhite: true  },
@@ -277,7 +316,6 @@ function positionToPieces(pos) {
 // ── Detail view ────────────────────────────────────────────────────────────────
 
 function selectPosition(pos, canvas, wrapper) {
-  // Deselect previous
   if (selectedCanvas) {
     selectedCanvas.closest('.pos-mini-wrapper')?.classList.remove('pos-mini-selected');
   }
@@ -285,56 +323,36 @@ function selectPosition(pos, canvas, wrapper) {
   selectedCanvas = canvas;
   selectedPos    = pos;
 
-  // Draw detail board
   const detailCanvas = document.getElementById('detail-canvas');
   drawBoard(detailCanvas, pos, DETAIL_SZ);
 
-  // Score rows
   const scoresEl = document.getElementById('detail-scores');
   scoresEl.innerHTML = renderScoreRows(pos);
 
-  // FEN
   const fenEl = document.getElementById('detail-fen');
   fenEl.textContent = pos.fen;
 
-  // Copy button
   document.getElementById('detail-copy-btn').onclick = () => {
     navigator.clipboard?.writeText(pos.fen);
   };
 
-  // Links
   const encoded = pos.fen.replace(/ /g, '_');
   document.getElementById('detail-lichess').href   = `https://lichess.org/analysis/${encoded}`;
   document.getElementById('detail-validator').href = `index.html?fen=${encodeURIComponent(pos.fen)}`;
 
-  // Show
   document.getElementById('detail-placeholder').style.display = 'none';
   document.getElementById('detail-content').style.display     = '';
 
-  // Scroll detail panel into view on mobile
   document.getElementById('detail-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-function renderCoordRow(pos) {
-  const fileLetters = ['a','b','c','d','e','f','g','h'];
-  const pieces = [
-    { label: 'WK', file: pos.wKf,      rank: pos.wKr   },
-    { label: 'WRP', file: pos.rookFile, rank: pos.wRR   },
-    { label: 'WP', file: pos.xFile,     rank: pos.xRank },
-    { label: 'BK', file: pos.bKf,       rank: pos.bKr   },
-    { label: 'BRP', file: pos.rookFile, rank: pos.bRR   },
-  ];
-  const parts = pieces.map(p => `<span class="pos-coord-chip">${p.label} ${fileLetters[p.file]}${p.rank + 1}</span>`);
-  return `<div class="pos-coord-row">${parts.join('')}</div>`;
 }
 
 function renderScoreRows(pos) {
   let html = '<div class="rule-score-list">';
 
   for (const rule of ALL_RULES) {
-    const color = RULE_COLORS[rule.id] ?? '#888';
+    const color      = RULE_COLORS[rule.id] ?? '#888';
     const applicable = rule.isApplicable(pos);
-    const pred = applicable ? rule.predict(pos) : null;
+    const pred       = applicable ? rule.predict(pos) : null;
 
     html += `<div class="rule-score-row">`;
     html += `<span class="rule-score-dot" style="background:${color}"></span>`;
