@@ -42,14 +42,28 @@ const DEFAULT_FEN = '8/8/4k3/8/3PK3/p7/P7/8 w - - 0 1';
 
 const CDN_ASSETS = 'https://cdn.jsdelivr.net/npm/cm-chessboard@8/assets/';
 
+const RULE_COLORS = {
+  bahr:      '#f0c040',
+  muller:    '#e06880',
+  dvoretsky: '#50d8a0',
+  race:      '#a880e8',
+};
+
+const RULE_SHORT_NAMES = {
+  bahr:      'Bähr',
+  muller:    'Müller',
+  dvoretsky: 'Dvoretsky',
+  race:      'Race',
+};
+
 // ── Application state ─────────────────────────────────────────────────────────
 
-let board         = null;
-let chess         = null;
-let heatmapOv     = null;
-let ruleOv        = null;
-let currentRuleId = 'bahr';
-let aggregateData = null;   // rule fallback when ≥3 KPPvKP pieces are missing
+let board           = null;
+let chess           = null;
+let heatmapOv       = null;
+let ruleOv          = null;
+let selectedRuleIds = new Set(['bahr']);
+let aggregateData   = null;  // rule fallback when ≥3 KPPvKP pieces are missing
 let isDragging       = false;
 let dragFromSq       = null;
 let dragPieceType    = null;   // 'extraPawn' | 'whiteKing' | ...
@@ -69,7 +83,7 @@ let paletteGhost     = null;
 
 // ── DOM references ────────────────────────────────────────────────────────────
 
-let elRuleSelect, elRuleDesc, elFenInput, elFenDisplay,
+let elRuleDesc, elFenInput, elFenDisplay,
     elValidityBadge, elLichessLink,
     elStatusBar, elHeatmapToggle, elScoreDisplay;
 
@@ -103,11 +117,10 @@ async function init() {
 
   // Legend
   const legendContainer = document.getElementById('legend-container');
-  if (legendContainer) legendContainer.appendChild(buildLegend());
+  if (legendContainer) legendContainer.appendChild(buildLegend(ALL_RULES, RULE_COLORS));
 }
 
 function grabDomRefs() {
-  elRuleSelect    = document.getElementById('rule-select');
   elRuleDesc      = document.getElementById('rule-description');
   elFenInput      = document.getElementById('fen-input');
   elFenDisplay    = document.getElementById('fen-display');
@@ -195,7 +208,7 @@ function setupBoard() {
     try { ruleOv = new RuleOverlay(svgEl, 'w'); }
     catch (e) { console.warn('RuleOverlay init failed:', e); }
 
-    onRuleChanged();
+    renderRuleOverlay();
     updatePositionDisplay();
   });
 }
@@ -514,26 +527,44 @@ function renderHeatmapForPiece(pieceKey) {
   if (!heatmapOv) return;
 
   const partialPos = boardToPartialPosition(chess);
-  const rule       = findRule(currentRuleId);
 
-  // Extra pawn cannot land on the rook file — suppress those columns.
   let skipFiles = null;
   if (pieceKey === 'extraPawn' && partialPos.rookFile != null) {
     skipFiles = new Set([partialPos.rookFile]);
   }
 
-  const ruleStats = {};
-  const syzStats  = {};
+  // Build one stats object per selected rule
+  const rulesData = [];
+  for (const ruleId of selectedRuleIds) {
+    const rule  = findRule(ruleId);
+    const color = RULE_COLORS[ruleId] ?? '#888';
+    const stats = {};
+    for (let rank = 0; rank < 8; rank++) {
+      for (let file = 0; file < 8; file++) {
+        if (skipFiles?.has(file)) continue;
+        const tempPos = buildTempPosition(partialPos, pieceKey, file, rank);
+        if (!tempPos) continue;
+        const computed = computeRuleStatsForPartialPos(tempPos, rule);
+        if (computed !== null) {
+          stats[rank * 8 + file] = computed;
+        } else {
+          const agg = aggregateData?.[ruleId]?.[pieceKey];
+          if (agg) stats[rank * 8 + file] = agg[rank * 8 + file];
+        }
+      }
+    }
+    rulesData.push({ color, stats });
+  }
 
-  for (let rank = 0; rank < 8; rank++) {
-    for (let file = 0; file < 8; file++) {
-      if (skipFiles?.has(file)) continue;
-
-      const tempPos = buildTempPosition(partialPos, pieceKey, file, rank);
-      if (!tempPos) continue;
-
-      // ── Syzygy bar: single O(1) partial lookup ───────────────────────────
-      if (isSyzygyReady()) {
+  // Syzygy stats (computed once, independent of rule selection)
+  let syzStats = null;
+  if (isSyzygyReady()) {
+    syzStats = {};
+    for (let rank = 0; rank < 8; rank++) {
+      for (let file = 0; file < 8; file++) {
+        if (skipFiles?.has(file)) continue;
+        const tempPos = buildTempPosition(partialPos, pieceKey, file, rank);
+        if (!tempPos) continue;
         const syz = lookupPartialPosition(tempPos);
         if (syz !== 'unknown') {
           syzStats[rank * 8 + file] = {
@@ -544,20 +575,10 @@ function renderHeatmapForPiece(pieceKey) {
           };
         }
       }
-
-      // ── Rule bar: iterate missing pieces, or fall back to aggregate ───────
-      const computed = computeRuleStatsForPartialPos(tempPos, rule);
-      if (computed !== null) {
-        ruleStats[rank * 8 + file] = computed;
-      } else {
-        // ≥3 missing pieces — use pre-computed aggregate as approximation.
-        const agg = aggregateData?.[currentRuleId]?.[pieceKey];
-        if (agg) ruleStats[rank * 8 + file] = agg[rank * 8 + file];
-      }
     }
   }
 
-  heatmapOv.renderBars(pieceKey, ruleStats, isSyzygyReady() ? syzStats : null, skipFiles);
+  heatmapOv.renderBars(pieceKey, rulesData, syzStats, skipFiles);
 }
 
 function highlightTargetSquare(algSq) {
@@ -584,7 +605,8 @@ function highlightTargetSquare(algSq) {
 
   let outcome;
   if (isFullKPPvKP) {
-    try { outcome = findRule(currentRuleId).predict(tempPos); }
+    const ruleId = [...selectedRuleIds][0];
+    try { outcome = findRule(ruleId).predict(tempPos); }
     catch { outcome = 'unknown'; }
   } else {
     outcome = lookupPartialPosition(tempPos);
@@ -625,25 +647,50 @@ function applyFreeMove(from, to) {
   }
 }
 
-// ── Rule change ───────────────────────────────────────────────────────────────
+// ── Rule selection ────────────────────────────────────────────────────────────
 
-function onRuleChanged() {
-  currentRuleId = elRuleSelect?.value ?? 'bahr';
-  const rule = findRule(currentRuleId);
-
-  if (elRuleDesc) elRuleDesc.innerHTML = rule.description;
-
+function onRuleToggled(ruleId) {
+  if (selectedRuleIds.has(ruleId)) {
+    if (selectedRuleIds.size > 1) selectedRuleIds.delete(ruleId);
+  } else {
+    selectedRuleIds.add(ruleId);
+  }
+  for (const btn of document.querySelectorAll('.rule-toggle')) {
+    btn.classList.toggle('rule-toggle-active', selectedRuleIds.has(btn.dataset.ruleId));
+  }
+  updateRuleDescriptions();
   renderRuleOverlay();
   updatePositionDisplay();
-
   if (isDragging && dragPieceType) renderHeatmapForPiece(dragPieceType);
+}
+
+function updateRuleDescriptions() {
+  if (!elRuleDesc) return;
+  elRuleDesc.innerHTML = '';
+  for (const ruleId of selectedRuleIds) {
+    const rule  = findRule(ruleId);
+    const color = RULE_COLORS[ruleId] ?? '#888';
+    const details = document.createElement('details');
+    details.className = 'rule-detail';
+    details.style.setProperty('--rule-color', color);
+    if (selectedRuleIds.size === 1) details.open = true;
+    const summary = document.createElement('summary');
+    summary.className = 'rule-summary';
+    summary.textContent = rule.name;
+    const content = document.createElement('div');
+    content.className = 'rule-desc-content';
+    content.innerHTML = rule.description;
+    details.appendChild(summary);
+    details.appendChild(content);
+    elRuleDesc.appendChild(details);
+  }
 }
 
 function renderRuleOverlay() {
   if (!ruleOv) return;
-  const pos  = boardToPosition(chess);
-  const rule = findRule(currentRuleId);
-  ruleOv.render(rule, pos);
+  const pos    = boardToPosition(chess);
+  const ruleId = [...selectedRuleIds][0];
+  ruleOv.render(findRule(ruleId), pos);
 }
 
 // ── Position display ──────────────────────────────────────────────────────────
@@ -673,11 +720,8 @@ function updatePositionDisplay() {
         elValidityBadge.textContent = '⚠ Not a KPPvkp position';
         elValidityBadge.className   = 'badge badge-invalid';
       }
-    } else if (findRule(currentRuleId).isApplicable(effectivePos)) {
-      elValidityBadge.textContent = '✓ Valid KPPvkp';
-      elValidityBadge.className   = 'badge badge-valid';
     } else {
-      elValidityBadge.textContent = '✓ Valid KPPvkp — rule not applicable';
+      elValidityBadge.textContent = '✓ Valid KPPvkp';
       elValidityBadge.className   = 'badge badge-valid';
     }
   }
@@ -697,66 +741,66 @@ function updateScoreDisplay(pos, outsideScope = false) {
     return;
   }
 
-  const rule       = findRule(currentRuleId);
-  const applicable = rule.isApplicable(pos);
+  // Syzygy lookup (once)
+  let syzResult = null;
+  if (isSyzygyReady()) {
+    const s = lookupPosition(pos);
+    if (s !== 'unknown') syzResult = s;
+  }
 
-  let html = '';
+  let html = '<div class="rule-score-list">';
 
-  if (applicable) {
-    const pred      = rule.predict(pos);
-    const predLabel = pred === 'win' ? 'White wins' : 'Draw';
-    const predClass = pred === 'win' ? 'win' : 'draw';
+  for (const ruleId of selectedRuleIds) {
+    const rule       = findRule(ruleId);
+    const color      = RULE_COLORS[ruleId] ?? '#888';
+    const shortName  = RULE_SHORT_NAMES[ruleId] ?? rule.name;
+    const applicable = rule.isApplicable(pos);
 
-    html = `Rule: <strong class="${predClass}">${predLabel}</strong>`;
+    html += `<div class="rule-score-row">`;
+    html += `<span class="rule-score-dot" style="background:${color}"></span>`;
+    html += `<span class="rule-score-name">${shortName}</span>`;
 
-    switch (currentRuleId) {
-      case 'dvoretsky': {
+    if (applicable) {
+      const pred  = rule.predict(pos);
+      const cls   = pred === 'win' ? 'win' : 'draw';
+      const label = pred === 'win' ? 'White wins' : 'Draw';
+      html += `<strong class="${cls}">${label}</strong>`;
+
+      // Compact rule-specific detail
+      let detail = '';
+      if (ruleId === 'dvoretsky') {
         const sc = rule.getScore(pos);
-        html += ` — White ${sc.whiteTotal} pts (pawn=${sc.whitePawnPts} + king=${sc.whiteKingBonus})`;
-        html += ` vs Black ${sc.blackTotal} pts`;
-        break;
-      }
-      case 'race': {
+        detail = `${sc.whiteTotal} vs ${sc.blackTotal} pts`;
+      } else if (ruleId === 'race') {
         const d = rule.getDistances(pos);
-        html += ` — stq=${d.stq}, bDistQ=${d.bDistToQ}`;
-        html += `; wDist=${d.wDistToPawn}, bDist=${d.bDistToPawn}`;
-        break;
-      }
-      case 'muller': {
+        detail = `stq=${d.stq}`;
+      } else if (ruleId === 'muller') {
         const inter = rule.getIntersection(pos);
         const d1 = Math.max(Math.abs(pos.bKf - pos.xFile), Math.abs(pos.bKr - pos.xRank));
         const d2 = Math.max(Math.abs(pos.rookFile - inter.file), Math.abs(pos.bRR - inter.rank));
-        html += ` — d1=${d1}, d2=${d2}, intersection=${coordToSquare(inter.file, inter.rank)}`;
-        break;
+        detail = `d1=${d1} d2=${d2}`;
       }
-    }
+      if (detail) html += ` <span class="rule-score-detail">${detail}</span>`;
 
-    // Syzygy ground truth (with agree/disagree only when rule is applicable)
-    if (isSyzygyReady()) {
-      const syz = lookupPosition(pos);
-      if (syz !== 'unknown') {
-        const syzLabel = { win: 'White wins', draw: 'Draw', loss: 'Black wins' }[syz];
-        const syzClass = { win: 'win',        draw: 'draw', loss: 'loss'       }[syz];
-        html += `<br>Syzygy: <strong class="${syzClass}">${syzLabel}</strong>`;
-        if (pred !== syz) {
-          html += ` <span class="loss" style="font-size:0.8em">✗ rule disagrees</span>`;
+      if (syzResult) {
+        if (pred === syzResult) {
+          html += `<span class="rule-score-verdict agree">✓</span>`;
         } else {
-          html += ` <span class="win" style="font-size:0.8em">✓ rule agrees</span>`;
+          html += `<span class="rule-score-verdict disagree">✗</span>`;
         }
       }
+    } else {
+      html += `<em class="rule-na">N/A</em>`;
     }
-  } else {
-    html = `<em>Rule not applicable to this position.</em>`;
+    html += `</div>`;
+  }
 
-    // Still show Syzygy when available
-    if (isSyzygyReady()) {
-      const syz = lookupPosition(pos);
-      if (syz !== 'unknown') {
-        const syzLabel = { win: 'White wins', draw: 'Draw', loss: 'Black wins' }[syz];
-        const syzClass = { win: 'win',        draw: 'draw', loss: 'loss'       }[syz];
-        html += `<br>Syzygy: <strong class="${syzClass}">${syzLabel}</strong>`;
-      }
-    }
+  html += '</div>';
+
+  if (syzResult) {
+    const syzLabel = { win: 'White wins', draw: 'Draw', loss: 'Black wins' }[syzResult];
+    const syzClass = { win: 'win',        draw: 'draw', loss: 'loss'       }[syzResult];
+    html += `<div class="syzygy-score-row">Syzygy: <strong class="${syzClass}">${syzLabel}</strong></div>`;
   }
 
   elScoreDisplay.innerHTML = html;
@@ -792,8 +836,6 @@ function loadChessFen(fen) {
 // ── Event listeners ───────────────────────────────────────────────────────────
 
 function setupEventListeners() {
-  elRuleSelect?.addEventListener('change', onRuleChanged);
-
   document.getElementById('fen-load-btn')?.addEventListener('click', () => {
     loadFen(elFenInput?.value ?? '');
   });
@@ -815,14 +857,18 @@ function setupEventListeners() {
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 function populateRuleSelector() {
-  if (!elRuleSelect) return;
-  elRuleSelect.innerHTML = '';
+  const container = document.getElementById('rule-toggles');
+  if (!container) return;
   for (const rule of ALL_RULES) {
-    const opt = document.createElement('option');
-    opt.value       = rule.id;
-    opt.textContent = rule.name;
-    elRuleSelect.appendChild(opt);
+    const btn = document.createElement('button');
+    btn.className = 'rule-toggle' + (selectedRuleIds.has(rule.id) ? ' rule-toggle-active' : '');
+    btn.dataset.ruleId = rule.id;
+    btn.style.setProperty('--rule-color', RULE_COLORS[rule.id] ?? '#888');
+    btn.textContent = rule.name;
+    btn.addEventListener('click', () => onRuleToggled(rule.id));
+    container.appendChild(btn);
   }
+  updateRuleDescriptions();
 }
 
 function setStatus(msg) {

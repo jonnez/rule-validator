@@ -118,37 +118,155 @@ header .subtitle {
   font-weight: 600;
 }
 
-/* ── Rule selector ───────────────────────────────────────────────────────── */
-#rule-select {
+/* ── Rule toggles ────────────────────────────────────────────────────────── */
+.rule-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.rule-toggle {
+  display: block;
   width: 100%;
+  padding: 6px 10px 6px 12px;
   background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 6px 8px;
-  font-size: 0.9rem;
-  cursor: pointer;
-  appearance: auto;
-}
-
-#rule-description {
-  font-size: 0.82rem;
   color: var(--text-dim);
-  margin-top: 8px;
-  line-height: 1.6;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--rule-color, var(--border));
+  border-radius: 4px;
+  font-size: 0.84rem;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  opacity: 0.45;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
 }
 
-#rule-description p { margin-bottom: 6px; }
-#rule-description ul { padding-left: 18px; }
-#rule-description table { border-collapse: collapse; margin: 4px 0; }
-#rule-description td, #rule-description th {
-  border: 1px solid var(--border); padding: 3px 6px;
+.rule-toggle.rule-toggle-active {
+  opacity: 1;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.rule-toggle:not(.rule-toggle-active):hover { opacity: 0.75; }
+.rule-toggle.rule-toggle-active:hover       { opacity: 0.9;  }
+
+/* ── Rule descriptions ───────────────────────────────────────────────────── */
+#rule-description { margin-top: 4px; }
+
+.rule-detail {
+  border-left: 2px solid var(--rule-color, var(--border));
+  padding-left: 8px;
+  margin-top: 8px;
+}
+
+.rule-detail + .rule-detail { margin-top: 10px; }
+
+summary.rule-summary {
+  color: var(--rule-color, var(--text));
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  list-style: none;
+  padding: 2px 0;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+summary.rule-summary::-webkit-details-marker { display: none; }
+
+summary.rule-summary::before {
+  content: '▶';
+  font-size: 0.58em;
+  opacity: 0.7;
+  transition: transform 0.12s;
+  flex-shrink: 0;
+}
+
+details.rule-detail[open] summary.rule-summary::before {
+  transform: rotate(90deg);
+}
+
+.rule-desc-content {
+  font-size: 0.79rem;
+  color: var(--text-dim);
+  margin-top: 5px;
+  line-height: 1.55;
+}
+
+.rule-desc-content p   { margin-bottom: 5px; }
+.rule-desc-content ul  { padding-left: 16px; }
+.rule-desc-content table { border-collapse: collapse; margin: 4px 0; }
+.rule-desc-content td, .rule-desc-content th {
+  border: 1px solid var(--border); padding: 2px 6px;
+}
+
+/* ── Rule score rows ─────────────────────────────────────────────────────── */
+.rule-score-list {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 2px;
+}
+
+.rule-score-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--surface);
+  font-size: 0.84rem;
+}
+
+.rule-score-row:last-child { border-bottom: none; }
+
+.rule-score-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.rule-score-name {
+  min-width: 80px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.rule-score-detail {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.rule-score-verdict {
+  font-size: 0.75rem;
+  margin-left: auto;
+}
+
+.rule-score-verdict.agree    { color: var(--win-color);  }
+.rule-score-verdict.disagree { color: var(--loss-color); }
+
+.rule-na {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.syzygy-score-row {
+  font-size: 0.84rem;
+  padding-top: 6px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
 }
 
 /* ── Score/prediction display ────────────────────────────────────────────── */
 #score-display {
   font-size: 0.85rem;
-  padding: 6px 0;
+  padding: 4px 0;
 }
 
 #score-display .win  { color: var(--win-color); }
