@@ -20,8 +20,8 @@
 const HEATMAP_GROUP_ID = 'kppvkp-heatmap';
 const TINT_GROUP_ID    = 'kppvkp-tint';
 const SYZYGY_COLOR     = '#40c0f0';
-const ZONE_FRAC        = 0.30;  // bottom 30% of square reserved for bars
 const BAR_GAP_FRAC     = 0.015; // gap between bars as fraction of square size
+const ZONE_FRAC        = (1 - 4 * BAR_GAP_FRAC) / 5;  // 5 bars fill exactly one square
 
 export class HeatmapOverlay {
   constructor(svgEl, orientation = 'w') {
@@ -51,9 +51,9 @@ export class HeatmapOverlay {
     const nBars = rulesData.length + (syzygyData ? 1 : 0);
     if (nBars === 0) return;
 
-    const totalGapH = Math.max(0, nBars - 1) * BAR_GAP_FRAC * sq;
-    const barH      = (ZONE_FRAC * sq - totalGapH) / nBars;
-    const zoneTopY  = sq * (1 - ZONE_FRAC);
+    const barH     = ZONE_FRAC * sq;
+    const barGap   = BAR_GAP_FRAC * sq;
+    const zoneTopY = sq - nBars * barH - (nBars - 1) * barGap;
 
     for (let rank = 0; rank < 8; rank++) {
       for (let file = 0; file < 8; file++) {
@@ -65,7 +65,7 @@ export class HeatmapOverlay {
         for (const { color, stats } of rulesData) {
           const stat = stats?.[idx];
           if (stat && stat.total > 0) {
-            const barY = y + zoneTopY + i * (barH + BAR_GAP_FRAC * sq);
+            const barY = y + zoneTopY + i * (barH + barGap);
             this._drawBar(this._heatmapGroup, x, barY, sq, barH, stat, color);
           }
           i++;
@@ -74,7 +74,7 @@ export class HeatmapOverlay {
         if (syzygyData) {
           const stat = syzygyData[idx];
           if (stat && stat.total > 0) {
-            const barY = y + zoneTopY + i * (barH + BAR_GAP_FRAC * sq);
+            const barY = y + zoneTopY + i * (barH + barGap);
             this._drawBar(this._heatmapGroup, x, barY, sq, barH, stat, SYZYGY_COLOR);
           }
         }
