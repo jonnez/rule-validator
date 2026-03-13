@@ -99,6 +99,10 @@ async function init() {
   injectSvgSprite();   // async; doesn't block init
   setupEventListeners();
 
+  // Load FEN from URL param if present (e.g. linked from positions page)
+  const fenParam = new URLSearchParams(window.location.search).get('fen');
+  if (fenParam) loadFen(fenParam);
+
   // Pre-compute rule aggregates (~200–400 ms) — used as fallback when the board
   // has ≥3 KPPvKP pieces missing (nearly empty board during free placement).
   aggregateData = computeAggregates(ALL_RULES);

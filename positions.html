@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bähr's Rule — Position Browser</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app-wrapper">
+
+  <!-- ── Header ──────────────────────────────────────────────────────────── -->
+  <header>
+    <h1>Bähr's Rule — Position Browser</h1>
+    <span class="subtitle">All 1,202 KPPvKP positions where Bähr's rule applies</span>
+    <a class="header-nav-link" href="index.html">← Rule Validator</a>
+  </header>
+
+  <!-- ── Loading state ───────────────────────────────────────────────────── -->
+  <div id="loading-overlay" class="pos-loading">
+    <div class="pos-loading-inner">
+      <div class="pos-spinner"></div>
+      <div id="loading-msg">Loading Syzygy tablebase…</div>
+    </div>
+  </div>
+
+  <!-- ── Main content ────────────────────────────────────────────────────── -->
+  <div class="pos-layout" id="pos-layout" style="display:none">
+
+    <!-- ── Detail panel (sticky left) ──────────────────────────────────── -->
+    <div class="pos-detail-panel" id="detail-panel">
+      <div id="detail-placeholder" class="pos-detail-placeholder">
+        Click any board to see details
+      </div>
+      <div id="detail-content" style="display:none">
+        <canvas id="detail-canvas" width="320" height="320"></canvas>
+        <div id="detail-scores" class="pos-detail-scores"></div>
+        <div class="pos-detail-fen-row">
+          <span id="detail-fen" class="pos-detail-fen"></span>
+          <button class="btn-secondary btn-small" id="detail-copy-btn" title="Copy FEN">⎘</button>
+        </div>
+        <div class="pos-detail-links">
+          <a id="detail-lichess" href="#" target="_blank" rel="noopener">Analyse on Lichess ↗</a>
+          <a id="detail-validator" href="#" target="_blank" rel="noopener">Open in Validator ↗</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Board grid (scrollable right) ────────────────────────────────── -->
+    <div class="pos-grid-area" id="grid-area">
+      <!-- Populated by positions.js -->
+    </div>
+
+  </div><!-- end pos-layout -->
+
+  <!-- ── Footer ──────────────────────────────────────────────────────────── -->
+  <footer>
+    <span id="pos-status">Initialising…</span>
+    <span>
+      <a href="README.md" target="_blank">README</a> &nbsp;|&nbsp;
+      <a href="https://github.com/" target="_blank">GitHub</a>
+    </span>
+  </footer>
+
+</div><!-- end app-wrapper -->
+
+<script type="module" src="js/positions.js"></script>
+</body>
+</html>
