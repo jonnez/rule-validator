@@ -58,6 +58,8 @@ let dragGeneration   = 0;      // incremented each time a new drag starts; lets 
 let realPickupPending = false; // set by pointerdown; cleared when drag tracking begins
 let lastPointerX      = 0;    // updated by pointermove — used for off-board drop detection
 let lastPointerY      = 0;
+let hadActiveDrag    = false;  // true once piece moved to a different square during drag
+let cancelNextValidate = false; // true when a drag was aborted by drop-on-source
 
 // ── Palette state ──────────────────────────────────────────────────────────────
 const PIECE_LIMITS   = { wk: 1, wp: 2, bk: 1, bp: 1 };
@@ -164,7 +166,12 @@ function setupBoard() {
         board.setPosition(chess.fen(), false);
         updatePositionDisplay();
         renderRuleOverlay();
+      } else if (hadActiveDrag) {
+        // Piece was dragged away then back to source. cm-chessboard silently
+        // entered clickTo state — flag the next validateMoveInput as stale.
+        cancelNextValidate = true;
       }
+      hadActiveDrag = false;
     }, 0);
   });
 
@@ -209,7 +216,9 @@ function handleInput(event) {
   switch (event.type) {
 
     case INPUT_EVENT_TYPE.moveInputStarted: {
-      realPickupPending = false;  // normal drag start — clear pending flag
+      realPickupPending  = false;
+      cancelNextValidate = false;
+      hadActiveDrag      = false;
       dragGeneration++;
       isDragging    = true;
       dragFromSq    = event.squareFrom;
@@ -218,13 +227,15 @@ function handleInput(event) {
       if (dragPieceType && elHeatmapToggle?.checked !== false) {
         renderHeatmapForPiece(dragPieceType);
       }
-      return true;   // allow dragging any piece
+      return true;
     }
 
     case INPUT_EVENT_TYPE.movingOverSquare: {
       if (!isDragging && realPickupPending && event.squareFrom) {
         // cm-chessboard skipped moveInputStarted — fake-start on first move event
-        realPickupPending = false;
+        realPickupPending  = false;
+        cancelNextValidate = false;
+        hadActiveDrag      = false;
         dragGeneration++;
         isDragging    = true;
         dragFromSq    = event.squareFrom;
@@ -232,6 +243,9 @@ function handleInput(event) {
         if (dragPieceType && elHeatmapToggle?.checked !== false) {
           renderHeatmapForPiece(dragPieceType);
         }
+      }
+      if (isDragging && event.squareTo && event.squareTo !== dragFromSq) {
+        hadActiveDrag = true;
       }
       if (isDragging && dragPieceType) {
         if (event.squareTo && event.squareTo !== dragFromSq) {
@@ -244,6 +258,18 @@ function handleInput(event) {
     }
 
     case INPUT_EVENT_TYPE.validateMoveInput: {
+      // Stale validate following a drag-back-to-source (cm-chessboard transitioned
+      // to clickTo state without calling any cleanup callback; see pointerup handler).
+      if (cancelNextValidate) {
+        cancelNextValidate = false;
+        hadActiveDrag      = false;
+        isDragging         = false;
+        dragFromSq         = null;
+        dragPieceType      = null;
+        heatmapOv?.clearAll();
+        return false;
+      }
+
       // Drop on source square — treat as cancel.
       if (event.squareFrom === event.squareTo) {
         moveApplied   = false;
