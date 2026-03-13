@@ -214,19 +214,10 @@ export function buildLegend(rules, ruleColors) {
   const div = document.createElement('div');
   div.className = 'heatmap-legend';
 
-  const ruleRows = rules.map(r =>
-    `<div class="legend-row">
-      <span class="legend-stripe" style="background:${ruleColors[r.id] ?? '#888'}"></span>
-      <span>${r.name}</span>
-    </div>`
-  ).join('');
-
   div.innerHTML = `
-    <div class="legend-title">Bar colors (label line)</div>
-    ${ruleRows}
     <div class="legend-row">
       <span class="legend-stripe" style="background:${SYZYGY_COLOR}"></span>
-      <span>Syzygy (always bottom)</span>
+      <span>Syzygy (always bottom bar)</span>
     </div>
     <hr>
     <div class="legend-title">Bar segments</div>
